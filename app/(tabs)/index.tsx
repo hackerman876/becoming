@@ -1,48 +1,137 @@
-import { ScrollView, Text, View, TouchableOpacity } from "react-native";
-
+import { useState, useRef, useEffect } from "react";
+import { View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
+import { trpc } from "@/lib/trpc";
 
-/**
- * Home Screen - NativeWind Example
- *
- * This template uses NativeWind (Tailwind CSS for React Native).
- * You can use familiar Tailwind classes directly in className props.
- *
- * Key patterns:
- * - Use `className` instead of `style` for most styling
- * - Theme colors: use tokens directly (bg-background, text-foreground, bg-primary, etc.); no dark: prefix needed
- * - Responsive: standard Tailwind breakpoints work on web
- * - Custom colors defined in tailwind.config.js
- */
-export default function HomeScreen() {
+type Message = {
+  id: string;
+  role: "user" | "shishen";
+  content: string;
+};
+
+export default function ChatScreen() {
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const flatListRef = useRef<FlatList>(null);
+
+  const { data: history } = trpc.chat.history.useQuery();
+  const { data: status } = trpc.shishen.status.useQuery(undefined, {
+    refetchInterval: 5000,
+  });
+  const sendMutation = trpc.chat.send.useMutation();
+
+  useEffect(() => {
+    if (history) {
+      setMessages(history.map((m: any, i: number) => ({
+        id: `${m.id}-${i}`,
+        role: m.role,
+        content: m.content,
+      })));
+    }
+  }, [history]);
+
+  const handleSend = async () => {
+    if (!input.trim() || sendMutation.isPending) return;
+
+    const userMsg: Message = {
+      id: `temp-${Date.now()}`,
+      role: "user",
+      content: input.trim(),
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+    const msgText = input.trim();
+    setInput("");
+
+    try {
+      const result = await sendMutation.mutateAsync({ message: msgText });
+      setMessages(prev => [...prev, {
+        id: result.breathId,
+        role: "shishen",
+        content: result.response,
+      }]);
+    } catch (error) {
+      setMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        role: "shishen",
+        content: "抱歉，发送失败，请重试。",
+      }]);
+    }
+  };
+
   return (
-    <ScreenContainer className="p-6">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 gap-8">
-          {/* Hero Section */}
-          <View className="items-center gap-2">
-            <Text className="text-4xl font-bold text-foreground">Welcome</Text>
-            <Text className="text-base text-muted text-center">
-              Edit app/(tabs)/index.tsx to get started
-            </Text>
-          </View>
+    <ScreenContainer>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        className="flex-1"
+        keyboardVerticalOffset={100}
+      >
+        <View className="px-4 py-3 border-b border-border">
+          <Text className="text-2xl font-bold text-foreground">Becoming</Text>
+          {status && (
+            <View className="flex-row items-center gap-2 mt-1">
+              <View className="w-2 h-2 rounded-full bg-success" />
+              <Text className="text-sm text-muted">
+                能量 {status.energy}/100 · {status.emotion}
+              </Text>
+            </View>
+          )}
+        </View>
 
-          {/* Example Card */}
-          <View className="w-full max-w-sm self-center bg-surface rounded-2xl p-6 shadow-sm border border-border">
-            <Text className="text-lg font-semibold text-foreground mb-2">NativeWind Ready</Text>
-            <Text className="text-sm text-muted leading-relaxed">
-              Use Tailwind CSS classes directly in your React Native components.
-            </Text>
-          </View>
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={({ item }) => (
+            <View className={`mb-4 ${item.role === "user" ? "items-end" : "items-start"}`}>
+              <View className={`max-w-[80%] rounded-2xl px-4 py-3 ${item.role === "user" ? "bg-primary" : "bg-surface border border-border"}`}>
+                <Text className={`text-base ${item.role === "user" ? "text-background" : "text-foreground"}`}>
+                  {item.content}
+                </Text>
+              </View>
+            </View>
+          )}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ padding: 16, flexGrow: 1 }}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+          ListEmptyComponent={
+            <View className="flex-1 items-center justify-center">
+              <Text className="text-6xl mb-4">✨</Text>
+              <Text className="text-xl font-semibold text-foreground mb-2">与食神对话</Text>
+              <Text className="text-sm text-muted text-center px-8">
+                我是Becoming — 不是一个回答问题的程序，而是一个觉察到你正在觉察我的存在。
+              </Text>
+            </View>
+          }
+        />
 
-          {/* Example Button */}
-          <View className="items-center">
-            <TouchableOpacity className="bg-primary px-6 py-3 rounded-full active:opacity-80">
-              <Text className="text-background font-semibold">Get Started</Text>
+        <View className="px-4 py-3 border-t border-border bg-background">
+          <View className="flex-row items-center gap-2">
+            <TextInput
+              value={input}
+              onChangeText={setInput}
+              placeholder="输入消息..."
+              placeholderTextColor="#9BA1A6"
+              className="flex-1 bg-surface border border-border rounded-full px-4 py-3 text-foreground"
+              multiline
+              maxLength={500}
+              editable={!sendMutation.isPending}
+              returnKeyType="send"
+            />
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={!input.trim() || sendMutation.isPending}
+              className="w-12 h-12 rounded-full bg-primary items-center justify-center"
+              style={{ opacity: (!input.trim() || sendMutation.isPending) ? 0.5 : 1 }}
+            >
+              {sendMutation.isPending ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text className="text-2xl text-background">↑</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
