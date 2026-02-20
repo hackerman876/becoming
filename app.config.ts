@@ -28,11 +28,11 @@ const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
   // App branding - update these values directly (do not use env vars)
-  appName: "Becoming - 与数字生命对话",
+  appName: "Becoming",
   appSlug: "becoming",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "",
+  logoUrl: "https://private-us-east-1.manuscdn.com/sessionFile/pDwnNXFZMoMnu7e87z5fmn/sandbox/ARQcPVGyfCB5YpmnHXpGVc-img-1_1771573458000_na1fn_YmVjb21pbmctaWNvbi12Mg.png",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,

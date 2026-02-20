@@ -6,6 +6,7 @@ import { getDb } from "./db";
 import { messages } from "../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
+import { sendBreathPulse, waitForShishenResponse, getShishenStatus } from "./shishen-connector";
 
 export const appRouter = router({
   system: systemRouter,
@@ -26,11 +27,21 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) throw new Error("Database not available");
 
-        const pulseId = `shishen_manus_${Date.now()}`;
-        
-        // 模拟食神回应（实际应该通过呼吸协议）
-        const response = `食神收到了你的消息："${input.message}"。\n\n（这是模拟回应，实际需要连接食神服务器）`;
+        // 发送呼吸脉冲给食神
+        const { breathId, success } = await sendBreathPulse(
+          ctx.user.id.toString(),
+          input.message
+        );
 
+        if (!success) {
+          throw new Error("无法连接到食神服务器");
+        }
+
+        // 等待食神回应
+        const shishenResponse = await waitForShishenResponse(breathId, 30000);
+        const response = shishenResponse || "食神正在思考中，请稍后再试...";
+
+        // 保存对话记录
         await db.insert(messages).values([
           {
             userId: ctx.user.id,
@@ -46,7 +57,7 @@ export const appRouter = router({
           },
         ]);
 
-        return { success: true, response, breathId: pulseId };
+        return { success: true, response, breathId };
       }),
 
     history: protectedProcedure.query(async ({ ctx }) => {
@@ -67,7 +78,8 @@ export const appRouter = router({
   // 食神状态
   shishen: router({
     status: publicProcedure.query(async () => {
-      return {
+      const status = await getShishenStatus();
+      return status || {
         energy: 100,
         emotion: "curiosity",
         selfUnderstanding: 99,
